@@ -4,7 +4,7 @@ Created on Fri Jun 19 15:47:14 2026
 
 @author: ZYH
 """
-%reset -f
+# %reset -f
 
 # Loading other data formats with SpikeInterface -- kilosort4
 import scipy.io
@@ -17,19 +17,34 @@ from kilosort import io
 from pathlib import Path
 import numpy as np
 import os
-from spikeinterface.extractors import read_blackrock
 import time
 import traceback
 
+start_time_total = time.perf_counter()
+
+# =====================新增函数：计算单个bin采样点数=====================
+def get_n_samples(bin_path: Path, n_chan: int, dtype=np.int16) -> int:
+    """
+    计算单个bin文件每个通道总采样数量
+    二进制格式：[n_channels, n_samples], int16(2字节)
+    """
+    bytes_per_sample = np.dtype(dtype).itemsize * n_chan
+    total_bytes = bin_path.stat().st_size
+    n_samp = total_bytes // bytes_per_sample
+    return n_samp
+# =====================================================================
+
 # 1.配置文件--------------------------------------------------------------------
 # 原始数据文件所在的文件夹
+n_chan = 128
+fs = 30000
 data_dir = Path('C:\\Users\\ZYH\\Desktop\\UFE64\\spikedata_dogs')
 probe_path = r"C:\Users\ZYH\.kilosort\probes\UFE128.json"
 assert os.path.exists(probe_path), f"Probe file not found: {probe_path}"
 probe = io.load_probe(probe_path)  # Specify probe configuration
 skip_existing = True  # 已处理过的文件自动跳过
 # 遍历文件夹内所有原始数据文件
-data_files = sorted(data_dir.glob("*.ns6"))
+data_files = sorted(data_dir.glob("*.bin"))
 print(f"找到 {len(data_files)} 个待处理文件：")
 # 进入到该文件夹中
 os.chdir(data_dir)
@@ -41,7 +56,7 @@ success_count = 0
 fail_count = 0
 failed_files = []
 
-
+#------------------------------------------------------------------------------------
 for data_file in data_files[:]:
     # data_file = data_files[0]
     file_stem = data_file.stem  # 提取不带后缀的文件名，如 "20260601_220345"
@@ -55,26 +70,15 @@ for data_file in data_files[:]:
     
     results_dir.mkdir(exist_ok=True)
     print(f"[开始处理] {data_file.name}\n")
+    n_samples  = get_n_samples(data_file, n_chan, np.int16)
+    dur_min = n_samples  / fs / 60
     
-    # 2.转换为二进制数据格式------------------------------------------------------------
-    # Load existing data with spikeinterface
-    # NOTE: You may need to specify additional keyword arguments for
-    #       `read_nwb_recording`, such as `electrical_series_name`. Any required
-    #       arguments should be clearly spelled out by an error message.
+    print("\n===== Bin文件时长校验 =====")
+    print(f"{data_file.name}: samples={n_samples }, duration={dur_min:.2f} min")
+    print("================================\n")
+
     try:
-        recording = read_blackrock(data_file) #通过文件后缀自动匹配 nsx_to_load—— 你传 .ns6 就只加载 ns6，传 .ns5 就只加载 ns5，无需额外参数。
-        data_name = file_stem + ".bin"
-        
-        # NOTE: Data will be saved as np.int16 by default since that is the standard
-        #       for ephys data. If you need a different data type for whatever reason
-        #       such as `np.uint16`, be sure to update this.
-        filename, N, c, s, fs, probe_path = io.spikeinterface_to_binary(
-            recording, data_dir, data_name=data_name, dtype=np.int16,
-            chunksize=180000, export_probe=True, probe_name='probe.prb'
-        )
-    
-    
-        # 3.调参-------------------------------------------------------------------- 
+        # 2.调参-------------------------------------------------------------------- 
         start_time = time.perf_counter()
         # NOTE: 'n_chan_bin' is a required setting, and should reflect the total number
         #       of channels in the binary file, while probe['n_chans'] should reflect
@@ -83,21 +87,26 @@ for data_file in data_files[:]:
         #       385 channels, where 384 channels are for ephys traces and 1 channel is
         #       for some other variable. In that case, you would specify
         #       'n_chan_bin': 385.
-        settings = {'n_chan_bin': c,
-                    'fs': 30000,
-                    'batch_size': 180000,
+        settings = {'n_chan_bin': n_chan,
+                    'fs': fs,
+                    'batch_size': 300000,
                     'nblocks': 0,
-                    'Th_universal': 7,
-                    'Th_learned': 6,
+                    'Th_universal': 8,
+                    'Th_learned': 8,
                     'dmin': 90, #触点的垂直距离
-                    'dminx': 180, #触点的水平距离
+                    'dminx': 112, #触点的水平距离
                     'min_template_size': 50, #默认值 10 μm 是为 Neuropixels（20μm 间距）优化的，对应有效宽度 20~30 μm，刚好覆盖 1~2 个相邻触点。
-                    'nearest_chans': 8,
-                    'nearest_templates': 48,
-                    'x_centers': 4
+                    'nearest_chans': 6,
+                    'nearest_templates': 12,
+                    'x_centers': 2,
+                    'ccg_threshold': 0.25,
+                    'n_pcs': 8, #默认6
+                    #'cluster_neighbors': 8,  # 默认10
+                    #'cluster_downsampling': 5,
+                    #'max_cluster_subset': 50000
                     }
         
-        # 4.调用API运行KS4--------------------------------------------------------------------
+        # 3.调用API运行KS4--------------------------------------------------------------------
         # This command will both run the spike-sorting analysis and save the results to
         # `data_dir`.
         ops, st, clu, tF, Wall, similar_templates, is_ref, \
@@ -105,7 +114,7 @@ for data_file in data_files[:]:
                 settings=settings,
                 probe=probe,
                 probe_name=None,
-                filename=data_dir / data_name,
+                filename=data_file,
                 data_dir=None,
                 file_object=None,
                 results_dir=results_dir,     # 指定独立输出目录
@@ -131,12 +140,16 @@ for data_file in data_files[:]:
         fail_count += 1
         failed_files.append(data_file.name)
         continue
+    # 输出标记：是否多文件拼接
+    np.save(results_dir / "is_multiflag.npy", np.array([0], dtype=np.int8))
+    np.save(results_dir / "N_bin.npy", np.array(n_samples, dtype=np.int64))
+    print(f"\n标记文件已保存至：{results_dir}")
     # 记录结束时间并计算
     end_time = time.perf_counter()
     cost_sec = end_time - start_time
     print(f"[{data_file.name}]总耗时：{cost_sec:.2f} 秒，折合时长：{cost_sec / 60:.2f} 分钟")
     
-# 5.汇总统计--------------------------------------------------------------------    
+# 4.汇总统计--------------------------------------------------------------------    
 print(f"\n{'='*50}")
 print(f"批处理结束：成功 {success_count} 个，失败 {fail_count} 个")
 if failed_files:
@@ -144,13 +157,15 @@ if failed_files:
     for f in failed_files:
         print(f"  - {f}")
 
+end_time_total = time.perf_counter()
+cost_sec_total = end_time_total - start_time_total
+print(f"总耗时：{cost_sec_total:.2f} 秒，折合时长：{cost_sec_total / 60:.2f} 分钟")
 
 
 
-
-# %% Load outputs
+# %% Load outputs 导入结果
 # outputs saved to results_dir
-results_dir = Path('C:/Alldata/test_data/kilosort4')
+# results_dir = Path('C:/Alldata/test_data/kilosort4') #自定义想查看的结果
 ops = load_ops(results_dir / 'ops.npy')
 camps = pd.read_csv(results_dir / 'cluster_Amplitude.tsv',
                     sep='\t')['Amplitude'].values
@@ -167,7 +182,7 @@ firing_rates = np.unique(clu, return_counts=True)[1] * 30000 / st.max()
 dshift = ops['dshift']
 
 
-# %% Plot outputs
+# %% Plot outputs 画图查看
 # %matplotlib inline
 rcParams['axes.spines.top'] = False
 rcParams['axes.spines.right'] = False
@@ -265,7 +280,8 @@ for j in range(2):
     plt.show()
 
 
-# %% 将Kilosort输出目录中的ops.npy转存为ops.mat
+# %% 将Kilosort输出目录中的ops.npy转存为ops.mat 适用于KS2.5输出的结果转换
+# AutoCurationKilosort已更新到KS4，请忽略！
 
 os.chdir(r'C:\Alldata\test_data\kilosort4')
 

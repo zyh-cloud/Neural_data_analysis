@@ -1,0 +1,74 @@
+{
+    "detectNoiseClusters":{
+        "n_random_spikes": 500, // Number of random spikes to find the channel with the largest amplitude
+        "min_firing_rate": 0.05, // Minimum firing rate to include a cluster
+        "min_signal_to_noise_ratio": 2, // Minimum signal to noise ratio to include a cluster
+        "waveform_window": [-48, 31], // Window to extract the waveform
+        "baseline_window": [-48, -32] // Window to calculate the baseline
+    },
+
+    "removeNoiseInsideCluster":{
+        "verbose": true, // Plot the removed spikes
+        "n_pc_feature": 2, // Number of principal components to use
+        "n_random_spikes": 500, // Number of random spikes to find the channel with the largest amplitude
+        "threshold": 5, // Threshold to remove spikes, isoutlier(pc_features, 'median', 'ThresholdFactor', threshold)`;
+        "waveform_window": [-20, 40], // Window to extract the waveform
+       "amp_thres_uv": 600, // Absolute spike amplitude threshold (µV) for noise rejection (default: 600)
+        "uV_per_bit": 0.25 // Conversion factor from AD counts to microvolts (default: 0.25 for Blackrock systems)
+    },
+
+    "merging":{
+        "verbose": true, // Plot the removed spikes
+        "waveform_window": [-20, 40], // Window to extract the waveform
+        "trough_amplitude_difference": 12, // absolute difference in trough amplitude (uV)
+        "trough_latency_difference": 3, // absolute difference in trough latency (samples)
+        "zero_crossings_interval": 5, // absolute difference in the trough-flanking zero-crossing interval (samples)
+        "peak_amplitude_difference": 8,  // absolute difference in post-trough positive-peak amplitude (uV)
+        "half_width_interval": 3,
+        "waveform_cross_correlation": 0.90
+    },
+
+    "duplicatedClusters":{
+        "verbose": true, // Plot the clusters that have a lot of spikes close in time
+        "dt": 0.5, // Time window to consider two spikes as duplicated
+        "overlap_percentage": 10, // Percentage of overlapping spikes to consider a cluster as duplicated
+        "n_random_spikes": 500, // Number of random spikes to find the channel with the largest amplitude
+        "waveform_window": [-31, 32] // Window to extract the waveform
+    },
+
+    "qualityMetrics":{
+        "metricNames": ["ISI violations", "Amplitude cutoffs", "Presence ratio", "Median Amplitude", "Mean Amplitude", "Isolation distance", "D prime", "Nearest-neighbor miss rate",
+            "Nearest-neighbor hit rate", "L ratio"], // Names of the metrics
+        "metricFieldNames": ["isi_violations", "amplitude_cutoffs", "presence_ratio", "amplitude_median", "amplitude_mean", "isolation_distance", "d_prime", "nn_miss_rate",
+        "nn_hit_rate", "l_ratio"], // Field names of the metrics because the names contain spaces and cannot be used as field names
+        "metricTypes": ["less", "less", "greater", "greater", "greater", "greater", "greater", "less", "greater", "less"], // Good units should have a value less or greater than the threshold
+
+        "goodCriteria": { // The field names and the threshold values for good units
+            "isi_violations": 0.30,
+            "amplitude_cutoffs": 0.10,
+            "presence_ratio": 0.60,
+            "amplitude_mean": 60
+        },
+
+        "muaCriteria": { // The field names and the threshold values for multi unit
+            "isi_violations": 0.50,
+            "amplitude_cutoffs": 0.20,
+            "presence_ratio": 0.50
+        },
+
+        // The parameters for computing the PC-related quality metrics
+        "num_channels_to_compare": 7, 
+        "max_spikes_for_unit": 500,
+        "max_spikes_for_nn": 10000,
+        "n_neighbors": 4,
+        "n_silhouette": 10000
+    },
+
+    "realignSpikeTimes":{
+        "n_random_spikes": 500, // Number of random spikes to find the channel with the largest amplitude
+        "waveform_window": [-64, 63], // Window to extract the waveform
+        "baseline_window": [-64, -33], // Window to calculate the baseline
+        "n_channels_included": 4, // Number of channels to include for the alignment
+        "verbose": true // Plot the alignment
+    }
+}

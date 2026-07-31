@@ -47,17 +47,18 @@ x_new = x - x_marker
 y_new = y - y_marker
 
 chanMap64 = np.array(df.iloc[:64, 4])
-kcoords = np.zeros(64)
+kcoords0 = np.zeros(64)
 n_chan = 64
 
 xc0 = x_new.values
 yc0 = y_new.values
+yc0 = yc0 - 3500
 
 probe0 = {
     'chanMap': chanMap64,
     'xc': xc0,
     'yc': yc0,
-    'kcoords': kcoords,
+    'kcoords': kcoords0,
     'n_chan': n_chan
 }
 
@@ -66,7 +67,7 @@ save_probe(probe0, r'C:\Users\ZYH\.kilosort\probes\UFE64.json')
 # %% make 128通道的UFE
 chanMap128 = np.array(df.iloc[:128, 4])
 
-kcoords = np.concatenate([
+kcoords1 = np.concatenate([
     np.zeros(64),
     np.ones(64)
 ]).astype(np.float32)
@@ -80,7 +81,7 @@ probe1 = {
     'chanMap': chanMap128,
     'xc': xc1,
     'yc': yc1,
-    'kcoords': kcoords,
+    'kcoords': kcoords1,
     'n_chan': n_chan
 }
 
